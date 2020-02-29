@@ -42,8 +42,13 @@ garage_type_dummy = pd.get_dummies(HousePrices.GarageType).drop('Attchd',axis = 
 
 #### Basement ####
 
+##########
 #### TotalBsmtSF
 HousePrices['TotalBsmtSF'] = HousePrices['TotalBsmtSF'].fillna(0)
+#### GRLivArea
+HousePrices['GrLivArea'] = HousePrices['GrLivArea'].fillna(0)
+#HousePrices['TotalSF'] = HousePrices['GrLivArea'] + HousePrices['TotalBsmtSF']
+##########
 
 # BsmtUnfSF Finished/ unfished basementv | percent between 0 and 1 | if Na, zero percent
 HousePrices['finishedbsmt'] = 1 - HousePrices['BsmtUnfSF']/HousePrices['TotalBsmtSF']
@@ -58,7 +63,7 @@ HousePrices.Fence = HousePrices.Fence.apply(lambda x: list(fence_dict.values())[
 fence_dummy = pd.get_dummies(HousePrices.Fence).drop('n_fence',axis = 1)
 
 cleaned_columns = HousePrices[['Id','CentralAir','HeatingQC','garage_score','Heating','Electrical',\
-                               'GarageArea','TotalBsmtSF','finishedbsmt']]
+                               'GarageArea','finishedbsmt','GrLivArea','TotalBsmtSF']]
 cleaned_columns = cleaned_columns.merge(garage_type_dummy,how = "outer",left_index=True,right_index=True)
 cleaned_columns_ME = cleaned_columns.merge(fence_dummy,how = "outer",left_index=True,right_index=True)
 
@@ -74,7 +79,6 @@ cleaned_columns_ME = cleaned_columns.merge(fence_dummy,how = "outer",left_index=
 ############## Vince Code
 #Select continuous features in the living and recreation category
 Living_Rec_Cont = HousePrices[["Id",
-"GrLivArea",
 "BedroomAbvGr",
 "BsmtFullBath",
 "BsmtHalfBath",
@@ -115,6 +119,14 @@ Living_Rec_Cat = Living_Rec_Cat.assign(Pool_Ex = np.select([Living_Rec_Cat['Pool
 # Check null values after convertion - commented out for now
 # Living_Rec_Cat.isnull().sum()
 
+
+##########
+#### TotalBsmtSF
+HousePrices['TotalBsmtSF'] = HousePrices['TotalBsmtSF'].fillna(0)
+HousePrices['GrLivArea'] = HousePrices['GrLivArea'].fillna(0)
+HousePrices['TotalSF'] = HousePrices['GrLivArea'] + HousePrices['TotalBsmtSF']
+##########
+
 # Fills na with 0
 Living_Rec_Cat=Living_Rec_Cat.fillna(0)
 
@@ -140,6 +152,10 @@ Living_Rec_Cat_Final = Living_Rec_Cat[["Id","KitchenQual","Basm_Quality","BsmtFi
 
 # Write out the output
 living_rec_all = Living_Rec_Cont_Final.merge(Living_Rec_Cat_Final, on = "Id")
+
+
+
+
 ############# sunny code
 cols = ['Id','ExterQual','ExterCond','OverallQual','OverallCond','MasVnrType',
        'RoofMatl','SaleCondition','OpenPorchSF', 'ScreenPorch', '3SsnPorch',

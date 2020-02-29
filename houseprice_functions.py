@@ -15,88 +15,40 @@ def ratings_to_ord(df,col,inplace = False):
     elif inplace == True:
         df[col] = df[col].apply(lambda x: list(qual_.values())[list(qual_.keys()).index(x)])
 
-def outliers(df,outlier_column ,num_sd = 4,method = 'outlier_df', operator = 'any', drop_zeros = True):
-    '''
-    This function takes a dataframe and returns a dictionary that identifies the outliers of each column
-    inputs:
-    method: (length | Outlier_df)
-    operator: (any | min_2 | all)
-    '''
-    outlier_dict = {}
-    d = []
-    full_outliers = []
-    for col in outlier_column:
-        if (df[[col]].dtypes[0] == np.int64()) or (df[[col]].dtypes[0] == np.float64()):
-            lst_ = []
-            outlier_dict[col] = lst_
-            mean = df[col].mean()
-            sd   = df[col].std()
-            mean_no_z = df[col].drop(0).mean()
-            sd_no_z = df[col].drop(0).std()
-            if drop_zeros == False:
-                outlier_bound_high = mean + sd*num_sd
-                outlier_bound_low  = mean - sd*num_sd
-            elif drop_zeros == True:
-                outlier_bound_high = mean_no_z + sd_no_z*num_sd
-                outlier_bound_low  = mean_no_z - sd_no_z*num_sd
-            outliers_idx = df.index[df[col].apply(lambda x: (x < outlier_bound_low) or (x > outlier_bound_high))].tolist()        
-            for i in outliers_idx:
-                full_outliers.append(i)
-            if method == 'length':
-                outlier_dict[col] = [len(outliers_idx)]
-            elif method == 'outlier_df':
-                for i in outliers_idx:
-                    d.append(df.iloc[i])
-    if method == 'length':
-        return pd.DataFrame.from_dict(outlier_dict,orient='index',columns=['Outlier_Count'])
-    elif (method == 'outlier_df'):
-        df_ = pd.DataFrame(d)
-        if operator == 'any':
-            return df_.drop_duplicates()
-        elif operator == 'min_2':
-            return df_[df_.duplicated()]
-        elif operator == 'all':
-            x = (pd.Series(full_outliers).value_counts(sort = False) == len(outlier_column.columns))
-            x = pd.DataFrame(x,columns = ['all_'])
-            x = x[x.all_ == True]
-            return df_.merge(x,right_index = True, left_index = True,how = 'inner').drop('all_', axis = 1).drop_duplicates()
-
-def outlier_selecter(df,outlier_column , num_sd = 3, min_unique = 20, drop_zeros = True,method = "dict"):
+def outlier_selecter(df,outlier_column , num_sd = 3, min_unique = 20, drop_zeros = True, for_test = False):
     '''
     creates a list of outliers to feed into the imputer
     '''
     outlier_dict = {}
-    full_outliers = set()
+    outlier_dict_test = {}
     for col in outlier_column:
-        if ((df[[col]].dtypes[0] == np.int64()) or (df[[col]].dtypes[0] == np.float64()))\
-         and (df[col].nunique() >= min_unique):
-            lst_ = []
-            outlier_dict[col] = lst_
-            mean = df[col].mean()
-            sd   = df[col].std()
-            mean_no_z = df[col].drop(0).mean()
-            sd_no_z = df[col].drop(0).std()
-            if drop_zeros == False:
-                outlier_bound_high = mean + sd*num_sd
-                outlier_bound_low  = mean - sd*num_sd
-            elif drop_zeros == True:
-                outlier_bound_high = mean_no_z + sd_no_z*num_sd
-                outlier_bound_low  = mean_no_z - sd_no_z*num_sd
-            outliers_idx = df.index[df[col].apply(lambda x: (x < outlier_bound_low) or (x > outlier_bound_high))].tolist()
-            outlier_dict[col] = outliers_idx
-            for i in outliers_idx:
-                full_outliers.add(i)
-    outlier_dict_nonz = {}
-    for key, value in outlier_dict.items():
-        if len(value) != 0:
-            outlier_dict_nonz[key] = value
-    if method == "dict":
-        return outlier_dict_nonz
-    elif method == "drop":
-        return list(full_outliers)
+        if col != 'Id':
+            #Making sure the column has at least 20 unique values to prevent binary outlier imputation
+            if (df[col].nunique() >= min_unique):
+                #imputes mean without dropping zeros
+                if drop_zeros == False:
+                    mean = df.loc[:,col].mean()
+                    sd   = df.loc[:,col].std()
+                    outlier_bound_high = mean + sd*num_sd
+                    outlier_bound_low  = mean - sd*num_sd
+                #imputes mean with zeros dropped
+                elif drop_zeros == True:
+                    mean_no_z = df.loc[(df.loc[:,col] != 0)].loc[:,col].mean()
+                    sd_no_z = df.loc[(df.loc[:,col] != 0)].loc[:,col].std()
+                    outlier_bound_high = mean_no_z + sd_no_z*num_sd
+                    outlier_bound_low  = mean_no_z - sd_no_z*num_sd
+                # finds the indexes of the outlies 
+                outliers_idx = df.index[df.loc[:,col].apply(lambda x: (x < outlier_bound_low) or (x > outlier_bound_high))].tolist()
+                #appending the column name and the outliers in that column to a dictionary
+                outlier_dict_test[col] = [outlier_bound_low, outlier_bound_high]
+                if len(outliers_idx) != 0:
+                    outlier_dict[col] = outliers_idx
+    if for_test == True:
+        return outlier_dict_test
+    else:
+        return outlier_dict
 
-
-def outlier_imputation(df_train,df_test,index_values, col = "",method = "drop_row",decimals = 0):
+def outlier_imputation(df_train,df_test,index_values, col = "",method = "drop_row",decimals = 0, drop_zeros = True):
     '''
     df: dataframe
     index values: an integer or list of ints that indicate the rows that need to be imputed
@@ -104,20 +56,86 @@ def outlier_imputation(df_train,df_test,index_values, col = "",method = "drop_ro
     method : the method of imputation "drop", "mean", "median", "mode"
     decimals: num of decimals to include in the rounding, default 0
     '''
+    idx_v = []
+    before = []
+    after = []
+    #value_switch = pd.DataFrame([idx_v,before,after],columns = ['Id',f'{col} Before Imputation',f'{col} After Imputation'])
     if type(index_values) == int:
         index_values = [index_values]
     for idx in index_values:
         drop_ = []
+        idx_v.append(idx)
+        col_ = df_train.loc[:,col]
+        col_drop = df_train.loc[:,col].loc[(col_ != 0)]
+        before.append(df_test.loc[:,col].iloc[idx])
+        #drop
         if method == "drop_row":
             if idx not in drop_:
                 drop_.append(idx)
                 df_test.drop(idx,inplace = True)
+                after.append('The whole row is gone')
+        #Mean
         elif method == "mean":
-            df_test[col].iloc[idx] = round(df_train[col].mean(),decimals)
+            if drop_zeros == False:
+                df_test.loc[:,col].iloc[idx] = col_.mean()
+            elif drop_zeros == True:
+                df_test.loc[:,col].iloc[idx] = col_drop.mean()
+        #Median
         elif method == "median":
-            df_test[col].iloc[idx] = round(df_train[col].median(),decimals)
+            if drop_zeros == False:
+                df_test.loc[:,col].iloc[idx] = col_.median()
+            elif drop_zeros == True:
+                df_test.loc[:,col].iloc[idx] = col_drop.median()
+        #Mode
         elif method == "mode":
-            df_test[col].iloc[idx] = round(df_train[col].mean(),decimals)
+            if drop_zeros == False:
+                df_test.loc[:,col].iloc[idx] = col_.mode()
+            elif drop_zeros == True:
+                df_test.loc[:,col].iloc[idx] = col_drop.mode()
+        #Random
         elif method == "random":
-            df_test[col].iloc[idx] = round(df_train[col].sample(random_state = 1).to_list()[0],decimals)
+            if drop_zeros == False:
+                df_test.loc[:,col].iloc[idx] = col_.sample()
+            elif drop_zeros == True:
+                df_test.loc[:,col].iloc[idx] = np.random.choice(col_drop)
+        after.append(round(df_test.loc[:,col].iloc[idx],decimals))
+    #creating a dataframe to see the new value change for the imputation
+    value_switch = pd.DataFrame(
+        {
+        'Id'                       : idx_v,
+         f'{col} Before Imputation': before,
+         f'{col} After Imputation' : after
+        }
+    )
+    print(value_switch.to_string())
+    print('='*60,'\n')
+
+
+
+def k_neighbors(df_train,df_test,imputed_column,index_values,neihgbor_coulmn,k):
+    df = df_train
+    ic = imputed_column
+    nc = neihgbor_coulmn
+    for idx in index_values:
+        # imputed columns neighbor value
+        before = df.loc[:,ic].iloc[idx]
+        icn_value = df.loc[:,nc].iloc[idx]
+        # index of k closest neighbor column values 
+        kn_index = np.abs(icn_value - df.loc[:,nc]).drop(idx).sort_values().head(k).index
+        # the mean of the index values ic value
+        mean_vic = df.loc[:,ic].iloc[kn_index].mean()
+        # replace the ic index with the new mean value
+        df_test.loc[:,ic].iloc[idx] = mean_vic
+        after = df_test.loc[:,ic].iloc[idx]
+        print(
+            "-"*20,
+            f"\nimputed on: {ic}",
+            f"\nNeighbor calculation: {nc}",
+            "\nID:",idx,
+            "\nBefore:",before,
+            "\nAfter:", after, 
+            '\n',
+            "-"*20
+        )
+
 
