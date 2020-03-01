@@ -19,6 +19,7 @@ def outlier_selecter(df,outlier_column , num_sd = 3, min_unique = 20, drop_zeros
     '''
     creates a list of outliers to feed into the imputer
     '''
+    pd.options.mode.chained_assignment = None
     outlier_dict = {}
     outlier_dict_test = {}
     for col in outlier_column:
@@ -48,7 +49,7 @@ def outlier_selecter(df,outlier_column , num_sd = 3, min_unique = 20, drop_zeros
     else:
         return outlier_dict
 
-def outlier_imputation(df_train,df_test,index_values, col = "",method = "drop_row",decimals = 0, drop_zeros = True):
+def outlier_imputation(df_train,df_test,index_values, col = "",method = "drop_row",decimals = 0, drop_zeros = True,sup_output = False):
     '''
     df: dataframe
     index values: an integer or list of ints that indicate the rows that need to be imputed
@@ -56,6 +57,7 @@ def outlier_imputation(df_train,df_test,index_values, col = "",method = "drop_ro
     method : the method of imputation "drop", "mean", "median", "mode"
     decimals: num of decimals to include in the rounding, default 0
     '''
+    pd.options.mode.chained_assignment = None
     idx_v = []
     before = []
     after = []
@@ -107,12 +109,14 @@ def outlier_imputation(df_train,df_test,index_values, col = "",method = "drop_ro
          f'{col} After Imputation' : after
         }
     )
-    print(value_switch.to_string())
-    print('='*60,'\n')
+    if sup_output == False:
+        print(value_switch.to_string())
+        print('='*60,'\n')
 
 
 
-def k_neighbors(df_train,df_test,imputed_column,index_values,neihgbor_coulmn,k):
+def k_neighbors(df_train,df_test,imputed_column,index_values,neihgbor_coulmn,k,sup_output = False):
+    pd.options.mode.chained_assignment = None
     df = df_train
     ic = imputed_column
     nc = neihgbor_coulmn
@@ -127,15 +131,16 @@ def k_neighbors(df_train,df_test,imputed_column,index_values,neihgbor_coulmn,k):
         # replace the ic index with the new mean value
         df_test.loc[:,ic].iloc[idx] = mean_vic
         after = df_test.loc[:,ic].iloc[idx]
-        print(
-            "-"*20,
-            f"\nimputed on: {ic}",
-            f"\nNeighbor calculation: {nc}",
-            "\nID:",idx,
-            "\nBefore:",before,
-            "\nAfter:", after, 
-            '\n',
-            "-"*20
-        )
+        if sup_output == False:
+            print(
+                "-"*20,
+                f"\nimputed on: {ic}",
+                f"\nNeighbor calculation: {nc}",
+                "\nID:",idx,
+                "\nBefore:",before,
+                "\nAfter:", after, 
+                '\n',
+                "-"*20
+            )
 
 
